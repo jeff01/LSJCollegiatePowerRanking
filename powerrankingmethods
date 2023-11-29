@@ -1,0 +1,313 @@
+        public async Task<IActionResult> OnPostUpdateRanks(int year, string division)
+        {
+            using (SqlConnection conn = new SqlConnection(Services.Connection.GetConnectionString()))
+            {
+                conn.Open();
+
+                using (SqlCommand cmd = new SqlCommand("UPDATE lsj_collegiateresults SET rating = 1.00 WHERE division = @division AND year = @year", conn))
+                {
+                    cmd.Parameters.AddWithValue("@year", year);
+                    cmd.Parameters.AddWithValue("@division", division);
+                    cmd.ExecuteNonQuery();
+                }
+
+                using (SqlCommand cmd = new SqlCommand("UPDATE LSJ_CollegiateTeams SET rating = 1.00 WHERE division = @division", conn))
+                {
+                    cmd.Parameters.AddWithValue("@division", division);
+                    cmd.ExecuteNonQuery();
+                }
+            }
+
+            for (int i = 0; i < 33; i++)
+            {
+                using (SqlConnection con = new SqlConnection(Services.Connection.GetConnectionString()))
+                {
+                    con.Open();
+
+                    using (SqlCommand executeCMD = new SqlCommand("update lsj_settings set value = @pctDone where setting = 'Collegiate'", con))
+                    {
+                        executeCMD.Parameters.AddWithValue("@pctDone", ((i + 1) * 3.333).ToString() + "% Done");
+                        executeCMD.ExecuteNonQuery();
+                    }
+                }
+
+                powerRankings(year, division);
+            }
+
+            using (SqlConnection con = new SqlConnection(Services.Connection.GetConnectionString()))
+            {
+                con.Open();
+
+                using (SqlCommand executeCMD = new SqlCommand("update lsj_settings set value = 'On' where setting = 'Collegiate'", con))
+                {
+                    executeCMD.ExecuteNonQuery();
+                }
+            }
+
+            TempData["Message"] = "<div class=\"alert alert-primary\" role=\"alert\">\r\n  Ranks have been updated!\r\n</div>";
+            return RedirectToPage("/Admin/CollegiateResults");
+        }
+
+        public void powerRankings(int minDate, string Division)
+        {
+            //Update the initial ratings
+            DataSet dsResults;
+
+            using (SqlConnection con = new SqlConnection(Services.Connection.GetConnectionString()))
+            {
+                string query = "SELECT LSJ_CollegiateResults.Contest, avg(LSJ_CollegiateTeams.Rating) as avgRating, LSJ_CollegiateResults.date, count(*) as teams FROM LSJ_CollegiateResults INNER JOIN LSJ_CollegiateTeams ON LSJ_CollegiateResults.Team = LSJ_CollegiateTeams.Team where lsj_collegiateresults.year = @year and lsj_collegiateresults.place < 11 and lsj_collegiateresults.division = @division and year = @year group by LSJ_CollegiateResults.Contest, LSJ_CollegiateResults.date";
+
+                using (SqlCommand cmd = new SqlCommand(query, con))
+                {
+                    cmd.CommandType = System.Data.CommandType.Text;
+                    cmd.Parameters.AddWithValue("@year", minDate);
+                    cmd.Parameters.AddWithValue("@division", Division);
+
+                    using (SqlDataAdapter sda = new SqlDataAdapter(cmd))
+                    {
+                        dsResults = new DataSet();
+                        sda.Fill(dsResults);
+                    }
+                }
+            }
+
+            // Loop through the results
+            foreach (DataRow row in dsResults.Tables[0].Rows)
+            {
+                //Update the results for each contest
+                DataSet contestResults;
+
+                using (SqlConnection con = new SqlConnection(Services.Connection.GetConnectionString()))
+                {
+                    string query = "select *, 1.05 - (datediff(day,date,getdate()) * 1.0 / 3650.0) as ratio from lsj_collegiateresults where LSJ_CollegiateResults.date = @date and contest = @contest and division = @division";
+                    using (SqlCommand cmd = new SqlCommand(query, con))
+                    {
+                        cmd.CommandType = System.Data.CommandType.Text;
+
+                        // Adding parameters to SqlCommand
+                        cmd.Parameters.AddWithValue("@date", row["date"]);
+                        cmd.Parameters.AddWithValue("@contest", row["Contest"]);
+                        cmd.Parameters.AddWithValue("@division", Division);
+
+                        con.Open();
+
+                        decimal rowCountFactor;
+
+                        using (SqlDataAdapter sda = new SqlDataAdapter(cmd))
+                        {
+                            contestResults = new DataSet();
+                            sda.Fill(contestResults);
+
+                            rowCountFactor = 1.00m + (contestResults.Tables[0].Rows.Count * .0025m);
+                        }
+
+                        //Update each result
+                        foreach (DataRow rowContestResults in contestResults.Tables[0].Rows)
+                        {
+                            decimal factor = 1.05m;
+
+                            int entries = (Int32)row["teams"];
+                            int rank = (Int32)rowContestResults["place"];
+
+                            if (entries >= 5)
+                            {
+                                if (rank == 1) { factor = 2m; }
+                                if (rank == 2) { factor = 1.9m; }
+                                if (rank == 3) { factor = 1.8m; }
+                                if (rank == 4) { factor = 1.7m; }
+                                if (rank == 5) { factor = 1.6m; }
+                                if (rank == 6) { factor = 1.5m; }
+                                if (rank == 7) { factor = 1.45m; }
+                                if (rank == 8) { factor = 1.4m; }
+                                if (rank == 9) { factor = 1.35m; }
+                                if (rank == 10) { factor = 1.3m; }
+                                if (rank == 11) { factor = 1.275m; }
+                                if (rank == 12) { factor = 1.25m; }
+                                if (rank == 13) { factor = 1.225m; }
+                                if (rank == 14) { factor = 1.2m; }
+                                if (rank == 15) { factor = 1.175m; }
+                                if (rank == 16) { factor = 1.15m; }
+                                if (rank == 17) { factor = 1.125m; }
+                                if (rank == 18) { factor = 1.1m; }
+                                if (rank == 19) { factor = 1.075m; }
+                                if (rank == 20) { factor = 1.05m; }
+                                if (rank > 20) { factor = 1.0m; }
+                            }
+                            else if (entries == 2)
+                            {
+                                if (rank == 1) { factor = 1.8m; }
+                                if (rank == 2) { factor = 1.25m; }
+                            }
+                            else if (entries == 3)
+                            {
+                                if (rank == 1) { factor = 1.9m; }
+                                if (rank == 2) { factor = 1.75m; }
+                                if (rank == 3) { factor = 1.15m; }
+                            }
+                            else if (entries == 4)
+                            {
+                                if (rank == 1) { factor = 1.95m; }
+                                if (rank == 2) { factor = 1.8m; }
+                                if (rank == 3) { factor = 1.6m; }
+                                if (rank == 4) { factor = 1.15m; }
+                            }
+                            else if (entries == 5)
+                            {
+                                if (rank == 1) { factor = 2m; }
+                                if (rank == 2) { factor = 1.85m; }
+                                if (rank == 3) { factor = 1.7m; }
+                                if (rank == 4) { factor = 1.5m; }
+                                if (rank == 5) { factor = 1.15m; }
+                            }
+                            else if (entries == 6)
+                            {
+                                if (rank == 1) { factor = 2m; }
+                                if (rank == 2) { factor = 1.9m; }
+                                if (rank == 3) { factor = 1.8m; }
+                                if (rank == 4) { factor = 1.7m; }
+                                if (rank == 5) { factor = 1.35m; }
+                                if (rank == 6) { factor = 1.1m; }
+                            }
+                            else if (entries == 7)
+                            {
+                                if (rank == 1) { factor = 2m; }
+                                if (rank == 2) { factor = 1.9m; }
+                                if (rank == 3) { factor = 1.8m; }
+                                if (rank == 4) { factor = 1.7m; }
+                                if (rank == 5) { factor = 1.5m; }
+                                if (rank == 6) { factor = 1.35m; }
+                                if (rank == 7) { factor = 1.15m; }
+                            }
+                            else if (entries == 8)
+                            {
+                                if (rank == 1) { factor = 2m; }
+                                if (rank == 2) { factor = 1.9m; }
+                                if (rank == 3) { factor = 1.8m; }
+                                if (rank == 4) { factor = 1.7m; }
+                                if (rank == 5) { factor = 1.5m; }
+                                if (rank == 6) { factor = 1.35m; }
+                                if (rank == 7) { factor = 1.2m; }
+                                if (rank == 8) { factor = 1.05m; }
+                            }
+                            else if (entries == 9)
+                            {
+                                if (rank == 1) { factor = 2m; }
+                                if (rank == 2) { factor = 1.9m; }
+                                if (rank == 3) { factor = 1.8m; }
+                                if (rank == 4) { factor = 1.7m; }
+                                if (rank == 5) { factor = 1.6m; }
+                                if (rank == 6) { factor = 1.45m; }
+                                if (rank == 7) { factor = 1.25m; }
+                                if (rank == 8) { factor = 1.15m; }
+                                if (rank == 9) { factor = 1.05m; }
+                            }
+
+                            if (row["contest"] == "NAILE") { factor = factor * 2m; }
+
+                            factor = factor * (decimal)rowContestResults["ratio"];
+                            factor = factor * rowCountFactor;
+
+                            using (SqlCommand executeCMD = new SqlCommand("Update lsj_collegiateresults set rating = @rating where id = @id", con))
+                            {
+                                executeCMD.Parameters.AddWithValue("@id", rowContestResults["id"]);
+                                executeCMD.Parameters.AddWithValue("@rating", factor * (decimal)row["avgRating"]);
+                                executeCMD.ExecuteNonQuery();
+                            }
+                        }
+
+                        //Clean up the results that weren't updated
+                        using (SqlCommand executeCMD = new SqlCommand("update lsj_collegiateresults set rating = 1.0 where rating is null and division = @division", con))
+                        {
+                            executeCMD.Parameters.AddWithValue("@division", Division);
+                            executeCMD.ExecuteNonQuery();
+                        }
+                    }
+                }
+            }
+
+            // Get maximum contest count
+            int maxcount = 5;
+
+            using (SqlConnection con = new SqlConnection(Services.Connection.GetConnectionString()))
+            {
+                using (SqlCommand cmd = new SqlCommand("SELECT MAX(contests) AS Expr1 FROM (SELECT COUNT(*) AS contests FROM LSJ_CollegiateResults WHERE year = @year AND division = @division  GROUP BY Team) AS derivedtbl_1", con))
+                {
+                    cmd.Parameters.AddWithValue("@year", minDate);
+                    cmd.Parameters.AddWithValue("@division", Division);
+                    cmd.CommandType = System.Data.CommandType.Text;
+                    con.Open();
+                    object result = cmd.ExecuteScalar();
+                    maxcount = Convert.ToInt32(result);
+                }
+            }
+
+            // Set intial rating
+
+            //Normalize the contest ratings
+            using (SqlConnection con = new SqlConnection(Services.Connection.GetConnectionString()))
+            {
+                con.Open();
+
+                using (SqlCommand executeCMD = new SqlCommand("update LSJ_CollegiateResults set rating = rating / (select avg(rating) from LSJ_CollegiateResults where division = @division and year = @year) where division = @division and  year = @year", con))
+                {
+                    executeCMD.Parameters.AddWithValue("@division", Division);
+                    executeCMD.Parameters.AddWithValue("@year", minDate);
+                    executeCMD.ExecuteNonQuery();
+                }
+            }
+
+            // Set the main rating
+
+            DataSet teamResults = new DataSet();
+
+            using (SqlConnection con = new SqlConnection(Services.Connection.GetConnectionString()))
+            {
+                string teamQuery = @"select team from lsj_collegiateresults where lsj_collegiateresults.year = @year and division = @division and rating is not null group by team";
+                using (SqlCommand cmd = new SqlCommand(teamQuery, con))
+                {
+                    cmd.CommandType = CommandType.Text;
+                    cmd.Parameters.AddWithValue("@year", minDate);
+                    cmd.Parameters.AddWithValue("@division", Division);
+
+                    using (SqlDataAdapter sda = new SqlDataAdapter(cmd))
+                    {
+                        sda.Fill(teamResults);
+                    }
+                }
+            }
+
+            // Loop through the teams and update their ratings
+            foreach (DataRow row in teamResults.Tables[0].Rows)
+            {
+                string team = row["team"].ToString();
+
+                using (SqlConnection con = new SqlConnection(Services.Connection.GetConnectionString()))
+                {
+                    string updateQuery = @"update lsj_collegiateteams set rating = (select avg(isNull(rating,1.0)) from lsj_collegiateresults where id in (select top 5 id from lsj_collegiateresults where team = @team and lsj_collegiateresults.year = @year order by rating desc)) where team = @team";
+
+                    using (SqlCommand cmd = new SqlCommand(updateQuery, con))
+                    {
+                        cmd.CommandType = CommandType.Text;
+                        cmd.Parameters.AddWithValue("@team", team);
+                        cmd.Parameters.AddWithValue("@year", minDate);
+
+                        con.Open();
+                        cmd.ExecuteNonQuery();
+                        con.Close();
+                    }
+                }
+            }
+
+            // Zero out the teams with no rating
+            using (SqlConnection con = new SqlConnection(Services.Connection.GetConnectionString()))
+            {
+                con.Open();
+
+                using (SqlCommand executeCMD = new SqlCommand("update LSJ_CollegiateTeams set rating = 0.00 where division  = @division and team not in (select team from LSJ_CollegiateResults where division = @division and year = @year group by team)", con))
+                {
+                    executeCMD.Parameters.AddWithValue("@division", Division);
+                    executeCMD.Parameters.AddWithValue("@year", minDate);
+                    executeCMD.ExecuteNonQuery();
+                }
+            }
+        }
